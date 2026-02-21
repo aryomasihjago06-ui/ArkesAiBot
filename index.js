@@ -2,83 +2,110 @@ require("dotenv").config();
 const TelegramBot = require("node-telegram-bot-api");
 const axios = require("axios");
 
-const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
+// ====== TOKEN TELEGRAM ======
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
+  polling: true,
+});
 
+// ====== DATABASE SEDERHANA ======
 let users = {};
 
-function getUser(id) {
+// ====== START ======
+bot.onText(/\/start/, (msg) => {
+  bot.sendMessage(
+    msg.chat.id,
+    "🔥 KESRYA AI 🔥\n\nKetik /menu untuk lihat fitur"
+  );
+});
+
+// ====== MENU ======
+bot.onText(/\/menu/, (msg) => {
+  bot.sendMessage(
+    msg.chat.id,
+    "📜 MENU:\n\n/profile\n/daily\n/premium"
+  );
+});
+
+// ====== PROFILE ======
+bot.onText(/\/profile/, (msg) => {
+  const id = msg.from.id;
+
   if (!users[id]) {
     users[id] = {
+      level: 1,
+      xp: 0,
+      coin: 0,
       limit: 10,
       premium: false,
-      coin: 0,
-      level: 1,
-      exp: 0
     };
   }
-  return users[id];
-}
 
-bot.on("message", async (msg) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  const text = msg.text;
+  const user = users[id];
 
-  if (!text) return;
-
-  const user = getUser(userId);
-
-  if (text === "/start") {
-    return bot.sendMessage(chatId,
-`🔥 KESRYA AI 🔥
-
-Ketik /menu untuk lihat fitur`
-    );
-  }
-
-  if (text === "/menu") {
-    return bot.sendMessage(chatId,
-`📜 MENU:
-/profile
-/daily
-/premium`
-    );
-  }
-
-  if (text === "/profile") {
-    return bot.sendMessage(chatId,
-`⭐ Level: ${user.level}
+  bot.sendMessage(
+    msg.chat.id,
+    `⭐ Level: ${user.level}
 💰 Coin: ${user.coin}
 🎟 Limit: ${user.limit}
 💎 Premium: ${user.premium ? "YA" : "TIDAK"}`
-    );
+  );
+});
+
+// ====== DAILY ======
+bot.onText(/\/daily/, (msg) => {
+  const id = msg.from.id;
+
+  if (!users[id]) {
+    users[id] = {
+      level: 1,
+      xp: 0,
+      coin: 0,
+      limit: 10,
+      premium: false,
+    };
   }
 
-  if (text === "/daily") {
-    user.coin += 50;
-    return bot.sendMessage(chatId, "🎁 Kamu dapat 50 coin!");
+  users[id].coin += 50;
+
+  bot.sendMessage(msg.chat.id, "🎁 Kamu dapat 50 coin!");
+});
+
+// ====== AI CHAT ======
+bot.on("message", async (msg) => {
+  const text = msg.text;
+  const chatId = msg.chat.id;
+
+  if (!text || text.startsWith("/")) return;
+
+  const id = msg.from.id;
+
+  if (!users[id]) {
+    users[id] = {
+      level: 1,
+      xp: 0,
+      coin: 0,
+      limit: 10,
+      premium: false,
+    };
   }
 
-  if (!user.premium) {
-    if (user.limit <= 0) {
-      return bot.sendMessage(chatId, "❌ Limit habis! Upgrade premium.");
-    }
-    user.limit--;
+  if (users[id].limit <= 0) {
+    return bot.sendMessage(chatId, "❌ Limit habis.");
   }
 
   try {
     const response = await axios.post(
       "https://api.openai.com/v1/chat/completions",
       {
-        model: "gpt-3.5-turbo",
+        model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: "Kamu adalah KESRYA AI yang santai dan keren." },
+          { role: "system", content: "Kamu adalah KESRYA AI, asisten keren dan pintar." },
           { role: "user", content: text }
         ]
       },
       {
         headers: {
-          Authorization: `Bearer ${process.env.OPENAI_KEY}`,
+          "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
           "Content-Type": "application/json"
         }
       }
@@ -86,16 +113,21 @@ Ketik /menu untuk lihat fitur`
 
     const reply = response.data.choices[0].message.content;
 
-    user.exp += 10;
-    if (user.exp >= 100) {
-      user.level++;
-      user.exp = 0;
+    users[id].limit -= 1;
+    users[id].xp += 10;
+
+    if (users[id].xp >= 100) {
+      users[id].level += 1;
+      users[id].xp = 0;
       bot.sendMessage(chatId, "🎉 LEVEL UP!");
     }
 
     bot.sendMessage(chatId, reply);
 
   } catch (err) {
+    console.log(err.response?.data || err.message);
     bot.sendMessage(chatId, "⚠️ AI Error.");
   }
 });
+
+console.log("KESRYA AI aktif 🚀");
